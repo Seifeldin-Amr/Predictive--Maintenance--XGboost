@@ -33,25 +33,6 @@ This project implements an end-to-end machine learning solution for predictive m
    - Real-time simulation mode
    - Visual analytics and reporting
 
-## 🤖 Machine Learning Models
-
-The project evaluates multiple classification models:
-- Logistic Regression
-- Random Forest Classifier
-- XGBoost Classifier (Best Performance)
-- Gradient Boosting
-- AdaBoost
-
-**Best Model:** XGBoost with **99%+ accuracy** on the test set.
-
-## 🎨 Design Theme
-
-The interface features a professional industrial design with:
-- **Dark Gray (#2C3E50)** - Primary background
-- **Steel Blue (#34495E)** - Secondary elements
-- **Safety Yellow (#F39C12)** - Highlights and alerts
-- Clean, modern layout suitable for engineers and maintenance teams
-
 ## 📋 Features
 
 ### Input Parameters
@@ -126,43 +107,6 @@ The system uses an XGBoost machine learning model (`xgboost_model.pkl`) trained 
 7. Temperature difference (K) - Derived
 8. Mechanical Power (W) - Derived
 
-## 📁 Project Structure
 
-```
-Predicitive mantainence/
-│
-├── app.py                 # Main Streamlit application
-├── xgboost_model.pkl      # Trained XGBoost model
-├── requirements.txt       # Python dependencies
-└── README.md             # This file
-```
 
-## 🛠️ Troubleshooting
 
-### Model Not Found Error
-Ensure `xgboost_model.pkl` is in the same directory as `app.py`
-
-### Package Import Errors
-Run: `pip install -r requirements.txt`
-
-### Port Already in Use
-Specify a different port: `streamlit run app.py --server.port 8502`
-
-## 💡 Tips for Best Results
-
-- Ensure input values are within realistic operating ranges
-- Higher confidence levels (>85%) indicate more reliable predictions
-- Monitor trends over time by testing different parameter combinations
-- Use the recommendations section for maintenance planning
-
-## 🔒 Safety Notes
-
-⚠️ This system is designed as a monitoring tool and should not be the sole basis for critical safety decisions. Always follow your organization's safety protocols and maintenance procedures.
-
-## 📞 Support
-
-For issues or questions about the dashboard, please refer to the Streamlit documentation at https://docs.streamlit.io
-
----
-
-**Developed for Industrial Equipment Monitoring | Powered by XGBoost & Streamlit**
