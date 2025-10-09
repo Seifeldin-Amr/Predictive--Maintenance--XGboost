@@ -332,8 +332,53 @@ with tab2:
         st.markdown("---")
         
         # Statistical summary
-        st.markdown("#### 📋 Statistical Summary (Target)")
-        st.dataframe(df_focus[["Machine failure"]].describe().T, use_container_width=True)
+        st.markdown("#### 📋 Statistical Summary")
+        
+        # Select specific variables for statistical summary
+        summary_cols = [
+            "Type", 
+            "Air temperature [K]", 
+            "Process temperature [K]", 
+            "Rotational speed [rpm]", 
+            "Torque [Nm]", 
+            "Tool wear [min]",
+            "Machine failure"
+        ]
+        
+        # Create separate summaries for categorical and numerical variables
+        categorical_cols = ["Type", "Machine failure"]
+        numerical_cols = [col for col in summary_cols if col not in categorical_cols]
+        
+        # Display numerical variables statistics
+        st.markdown("##### Numerical Variables Statistics")
+        numerical_stats = df_focus[numerical_cols].describe()
+        st.dataframe(numerical_stats, use_container_width=True)
+        
+        # Display categorical variables statistics
+        st.markdown("##### Categorical Variables Distribution")
+        cat_col1, cat_col2 = st.columns(2)
+        
+        with cat_col1:
+            st.markdown("**Machine Type Distribution:**")
+            type_counts = df_focus["Type"].value_counts()
+            type_percentages = df_focus["Type"].value_counts(normalize=True) * 100
+            type_summary = pd.DataFrame({
+                'Count': type_counts,
+                'Percentage': type_percentages.round(2)
+            })
+            st.dataframe(type_summary, use_container_width=True)
+        
+        with cat_col2:
+            st.markdown("**Machine Failure Distribution:**")
+            failure_counts = df_focus["Machine failure"].value_counts()
+            failure_percentages = df_focus["Machine failure"].value_counts(normalize=True) * 100
+            failure_summary = pd.DataFrame({
+                'Count': failure_counts,
+                'Percentage': failure_percentages.round(2)
+            })
+            failure_summary.index = ['Healthy (0)', 'Failure (1)']
+            st.dataframe(failure_summary, use_container_width=True)
+        
         st.markdown("---")
         
         # Visualization tabs
