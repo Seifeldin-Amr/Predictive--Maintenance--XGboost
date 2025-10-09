@@ -302,249 +302,409 @@ if model is None:
     st.error("⚠️ Model could not be loaded. Please ensure 'xgboost_model.pkl' is in the correct directory.")
     st.stop()
 
-# Sidebar for inputs
-with st.sidebar:
-    st.markdown("### 🔧 Machine Parameters")
-    st.markdown("---")
-    
-    st.markdown("#### Primary Inputs")
-    
-    # Machine Type selection
-    machine_type = st.selectbox(
-        "Machine Type",
-        options=["L", "M", "H"],
-        index=1,
-        help="Machine quality variant: L (Low), M (Medium), H (High)"
-    )
-    
-    torque = st.slider(
-        "Torque (Nm)",
-        min_value=0.0,
-        max_value=100.0,
-        value=40.0,
-        step=0.1,
-        help="Operating torque of the milling machine"
-    )
-    
-    rpm = st.slider(
-        "Rotational Speed (rpm)",
-        min_value=0,
-        max_value=3000,
-        value=1500,
-        step=10,
-        help="Spindle rotation speed"
-    )
-    
-    process_temp = st.slider(
-        "Process Temperature (K)",
-        min_value=273.0,
-        max_value=373.0,
-        value=310.0,
-        step=0.1,
-        help="Temperature during machining process"
-    )
-    
-    air_temp = st.slider(
-        "Air Temperature (K)",
-        min_value=273.0,
-        max_value=323.0,
-        value=298.0,
-        step=0.1,
-        help="Ambient air temperature"
-    )
-    
-    tool_wear = st.slider(
-        "Tool Wear (min)",
-        min_value=0,
-        max_value=300,
-        value=100,
-        step=1,
-        help="Tool wear time in minutes"
-    )
-    
-    st.markdown("---")
-    
-    # Calculate derived features
-    temp_diff, mech_power = calculate_derived_features(torque, rpm, process_temp, air_temp)
-    
-    st.markdown("#### 📊 Derived Features")
-    st.metric("Temperature Difference", f"{temp_diff:.2f} K")
-    st.metric("Mechanical Power", f"{mech_power:.2f} W")
-    
-    st.markdown("---")
-    
-    predict_button = st.button("🔍 ANALYZE MACHINE HEALTH", use_container_width=True)
+# Create main tabs
+tab1, tab2 = st.tabs(["🔧 Machine Health", "📊 Dataset Statistics"])
 
-# Main content area
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown("### 📈 Current Operating Conditions")
-    
-    # Create feature visualization
-    features_dict = {
-        'Torque': torque,
-        'Rotational Speed': rpm / 10,  # Scale for better visualization
-        'Process Temp': process_temp - 273,  # Convert to Celsius for viz
-        'Air Temp': air_temp - 273,
-        'Temp Difference': temp_diff,
-        'Mech Power': mech_power / 10  # Scale for better visualization
-    }
-    
-    fig_features = create_feature_chart(features_dict)
-    st.plotly_chart(fig_features, use_container_width=True)
-
-with col2:
-    st.markdown("### ⚡ Key Metrics")
-    
-    # Display gauges
-    gauge_torque = create_gauge_chart(torque, "Torque", 100)
-    st.plotly_chart(gauge_torque, use_container_width=True)
-
-st.markdown("---")
-
-# Prediction section
-if predict_button:
-    with st.spinner("🔄 Analyzing machine condition..."):
-        # Simulate processing time for effect
-        time.sleep(1)
+with tab2:
+    try:
+        # Load dataset
+        df = pd.read_csv("ai4i2020.csv")
+        # Focused columns
+        focus_cols = [
+            "Type", "Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]", "Machine failure"
+        ]
+        df_focus = df[focus_cols].copy()
         
-        # Prepare input data
-        input_data = pd.DataFrame({
-            'Type': [machine_type],
-            'Air temperature (K)': [air_temp],
-            'Process temperature (K)': [process_temp],
-            'Rotational speed (rpm)': [rpm],
-            'Torque (Nm)': [torque],
-            'Tool wear (min)': [tool_wear],
-            'temperature_difference': [temp_diff],
-            'Mechanical Power (W)': [mech_power]
-        })
+        # Data quality
+        total_samples = len(df_focus)
+        num_features = len(focus_cols) - 1
+        num_targets = 1
+        missing = df_focus.isnull().sum().sum()
+        data_quality = 100 * (1 - missing / (df_focus.size))
         
-        # Convert Type to category for XGBoost compatibility
-        input_data['Type'] = input_data['Type'].astype('category')
+        # Overview metrics
+        st.markdown("#### 📊 Dataset Overview")
+        colA, colB, colC, colD = st.columns(4)
+        colA.metric("Total Samples", total_samples)
+        colB.metric("Features", num_features)
+        colC.metric("Target Variables", num_targets)
+        colD.metric("Data Quality", f"{data_quality:.1f}%")
+        st.markdown("---")
         
-        try:
-            # Make prediction with categorical feature enabled
-            prediction = model.predict(input_data)[0]
-            prediction_proba = model.predict_proba(input_data)[0]
+        # Statistical summary
+        st.markdown("#### 📋 Statistical Summary (Target)")
+        st.dataframe(df_focus[["Machine failure"]].describe().T, use_container_width=True)
+        st.markdown("---")
+        
+        # Visualization tabs
+        viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs([
+            "Target Distributions", "Feature Distributions", "Correlations", "Normalized Comparison"
+        ])
+        
+        with viz_tab1:
+            st.markdown("##### Machine Failure Distribution")
+            failure_counts = df_focus["Machine failure"].value_counts()
+            fig = px.bar(
+                x=['Healthy (0)', 'Failure (1)'], 
+                y=[failure_counts[0], failure_counts[1]], 
+                color=['Healthy (0)', 'Failure (1)'],
+                color_discrete_map={'Healthy (0)': "#27AE60", 'Failure (1)': "#E74C3C"},
+                title="Machine Failure Distribution"
+            )
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(44, 62, 80, 0.3)',
+                font={'color': '#ECF0F1'},
+                xaxis={'gridcolor': '#34495E'},
+                yaxis={'gridcolor': '#34495E'},
+                showlegend=False
+            )
+            st.plotly_chart(fig, use_container_width=True)
             
-            # Display results
-            st.markdown("### 🎯 Diagnostic Results")
-            
-            result_col1, result_col2, result_col3 = st.columns(3)
-            
-            with result_col1:
-                st.markdown("#### Machine Status")
-                status_html = get_status_html(prediction, prediction_proba[prediction])
-                st.markdown(status_html, unsafe_allow_html=True)
-            
-            with result_col2:
-                st.markdown("#### Confidence Level")
-                confidence = prediction_proba[prediction] * 100
-                st.markdown(f'<div class="metric-value">{confidence:.1f}%</div>', unsafe_allow_html=True)
-            
-            with result_col3:
-                st.markdown("#### Prediction Time")
-                current_time = datetime.now().strftime("%H:%M:%S")
-                st.markdown(f'<div class="metric-value" style="font-size: 1.5rem;">{current_time}</div>', unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Detailed analysis
-            detail_col1, detail_col2 = st.columns(2)
-            
-            with detail_col1:
-                st.markdown("#### 📊 Probability Distribution")
-                
-                prob_fig = go.Figure(data=[
-                    go.Bar(
-                        x=['Healthy', 'Failure Risk'],
-                        y=prediction_proba * 100,
-                        marker=dict(
-                            color=['#27AE60' if prediction == 0 else '#E74C3C', 
-                                   '#E74C3C' if prediction == 1 else '#27AE60'],
-                            line=dict(color='#2C3E50', width=2)
-                        ),
-                        text=[f"{p*100:.1f}%" for p in prediction_proba],
-                        textposition='auto',
+        with viz_tab2:
+            st.markdown("##### Feature Distributions")
+            for col in focus_cols[:-1]:  # Exclude target variable
+                if col == "Type":
+                    # Handle categorical Type column
+                    type_counts = df_focus[col].value_counts()
+                    fig = px.bar(
+                        x=type_counts.index, 
+                        y=type_counts.values, 
+                        title=f"{col} Distribution",
+                        color=type_counts.index,
+                        color_discrete_map={'L': "#3498DB", 'M': "#F39C12", 'H': "#E74C3C"}
                     )
-                ])
+                else:
+                    # Handle numerical columns
+                    fig = px.histogram(df_focus, x=col, nbins=30, title=f"{col} Distribution")
                 
-                prob_fig.update_layout(
+                fig.update_layout(
                     paper_bgcolor='rgba(0,0,0,0)',
                     plot_bgcolor='rgba(44, 62, 80, 0.3)',
                     font={'color': '#ECF0F1'},
                     xaxis={'gridcolor': '#34495E'},
-                    yaxis={'title': 'Probability (%)', 'gridcolor': '#34495E'},
-                    height=300,
+                    yaxis={'gridcolor': '#34495E'},
                     showlegend=False
                 )
+                st.plotly_chart(fig, use_container_width=True)
                 
-                st.plotly_chart(prob_fig, use_container_width=True)
+        with viz_tab3:
+            st.markdown("##### Feature-Target Correlations")
+            # Create numeric version of dataframe for correlation
+            df_numeric = df_focus.copy()
+            # Convert Type to numeric (L=0, M=1, H=2)
+            df_numeric['Type'] = df_numeric['Type'].map({'L': 0, 'M': 1, 'H': 2})
             
-            with detail_col2:
-                st.markdown("#### 📋 Recommendations")
+            corr = df_numeric.corr()
+            fig = px.imshow(
+                corr, 
+                text_auto=True, 
+                color_continuous_scale="RdBu", 
+                aspect="auto",
+                title="Feature-Target Correlation Matrix"
+            )
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(44, 62, 80, 0.3)',
+                font={'color': '#ECF0F1'}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+        with viz_tab4:
+            st.markdown("##### Normalized Feature Comparison")
+            # Create normalized version for comparison
+            norm_df = df_focus.copy()
+            
+            # Normalize only numerical features
+            numerical_cols = [col for col in focus_cols[:-1] if col != "Type"]
+            for col in numerical_cols:
+                norm_df[col] = (norm_df[col] - norm_df[col].mean()) / norm_df[col].std()
+            
+            # Create box plots for numerical features
+            fig = px.box(
+                norm_df, 
+                y=numerical_cols, 
+                points="outliers", 
+                title="Normalized Feature Comparison (Numerical Features Only)"
+            )
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(44, 62, 80, 0.3)',
+                font={'color': '#ECF0F1'},
+                xaxis={'gridcolor': '#34495E'},
+                yaxis={'gridcolor': '#34495E'}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+        st.markdown("---")
+        
+        # Data Insights
+        st.markdown("#### 💡 Data Insights")
+        info1, info2 = st.columns(2)
+        
+        with info1:
+            st.markdown("""
+            <div class="info-box">
+                <h4 style="color: #F39C12;">Scaling Strategy</h4>
+                <p style="color: #ECF0F1;">Features are normalized using standard deviation scaling for fair comparison and visualization. This helps highlight outliers and trends across different units.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with info2:
+            st.markdown("""
+            <div class="info-box">
+                <h4 style="color: #F39C12;">Score Interpretation</h4>
+                <p style="color: #ECF0F1;">Performance scores are interpreted as: <br> <b>Excellent</b> (&gt;90%), <b>Good</b> (80-90%), <b>Average</b> (60-80%), <b>Poor</b> (&lt;60%). Use these to guide maintenance actions.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    except Exception as e:
+        st.error(f"Dataset error: {e}. Please ensure 'ai4i2020.csv' is present and formatted correctly.")
+
+with tab1:
+    # Sidebar for inputs
+    with st.sidebar:
+        st.markdown("### 🔧 Machine Parameters")
+        st.markdown("---")
+        
+        st.markdown("#### Primary Inputs")
+        
+        # Machine Type selection
+        machine_type = st.selectbox(
+            "Machine Type",
+            options=["L", "M", "H"],
+            index=1,
+            help="Machine quality variant: L (Low), M (Medium), H (High)"
+        )
+        
+        torque = st.slider(
+            "Torque (Nm)",
+            min_value=0.0,
+            max_value=100.0,
+            value=40.0,
+            step=0.1,
+            help="Operating torque of the milling machine"
+        )
+        
+        rpm = st.slider(
+            "Rotational Speed (rpm)",
+            min_value=0,
+            max_value=3000,
+            value=1500,
+            step=10,
+            help="Spindle rotation speed"
+        )
+        
+        process_temp = st.slider(
+            "Process Temperature (K)",
+            min_value=273.0,
+            max_value=373.0,
+            value=310.0,
+            step=0.1,
+            help="Temperature during machining process"
+        )
+        
+        air_temp = st.slider(
+            "Air Temperature (K)",
+            min_value=273.0,
+            max_value=323.0,
+            value=298.0,
+            step=0.1,
+            help="Ambient air temperature"
+        )
+        
+        tool_wear = st.slider(
+            "Tool Wear (min)",
+            min_value=0,
+            max_value=300,
+            value=100,
+            step=1,
+            help="Tool wear time in minutes"
+        )
+        
+        st.markdown("---")
+        
+        # Calculate derived features
+        temp_diff, mech_power = calculate_derived_features(torque, rpm, process_temp, air_temp)
+        
+        st.markdown("#### 📊 Derived Features")
+        st.metric("Temperature Difference", f"{temp_diff:.2f} K")
+        st.metric("Mechanical Power", f"{mech_power:.2f} W")
+        
+        st.markdown("---")
+        
+        predict_button = st.button("🔍 ANALYZE MACHINE HEALTH", use_container_width=True)
+
+    # Main content area
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.markdown("### 📈 Current Operating Conditions")
+        
+        # Create feature visualization
+        features_dict = {
+            'Torque': torque,
+            'Rotational Speed': rpm / 10,  # Scale for better visualization
+            'Process Temp': process_temp - 273,  # Convert to Celsius for viz
+            'Air Temp': air_temp - 273,
+            'Temp Difference': temp_diff,
+            'Mech Power': mech_power / 10  # Scale for better visualization
+        }
+        
+        fig_features = create_feature_chart(features_dict)
+        st.plotly_chart(fig_features, use_container_width=True)
+
+    with col2:
+        st.markdown("### ⚡ Key Metrics")
+        
+        # Display gauges
+        gauge_torque = create_gauge_chart(torque, "Torque", 100)
+        st.plotly_chart(gauge_torque, use_container_width=True)
+
+    st.markdown("---")
+
+    # Prediction section
+    if predict_button:
+        with st.spinner("🔄 Analyzing machine condition..."):
+            # Simulate processing time for effect
+            time.sleep(1)
+            
+            # Prepare input data
+            input_data = pd.DataFrame({
+                'Type': [machine_type],
+                'Air temperature (K)': [air_temp],
+                'Process temperature (K)': [process_temp],
+                'Rotational speed (rpm)': [rpm],
+                'Torque (Nm)': [torque],
+                'Tool wear (min)': [tool_wear],
+                'temperature_difference': [temp_diff],
+                'Mechanical Power (W)': [mech_power]
+            })
+            
+            # Convert Type to category for XGBoost compatibility
+            input_data['Type'] = input_data['Type'].astype('category')
+            
+            try:
+                # Make prediction with categorical feature enabled
+                prediction = model.predict(input_data)[0]
+                prediction_proba = model.predict_proba(input_data)[0]
                 
-                if prediction == 0:
-                    if confidence > 85:
-                        st.markdown("""
-                        <div class="info-box">
-                            <p style="color: #27AE60; font-weight: bold;">✅ Optimal Operating Condition</p>
-                            <p style="color: #ECF0F1;">• Continue normal operations</p>
-                            <p style="color: #ECF0F1;">• Maintain current parameters</p>
-                            <p style="color: #ECF0F1;">• Schedule routine inspection</p>
-                        </div>
-                        """, unsafe_allow_html=True)
+                # Display results
+                st.markdown("### 🎯 Diagnostic Results")
+                
+                result_col1, result_col2, result_col3 = st.columns(3)
+                
+                with result_col1:
+                    st.markdown("#### Machine Status")
+                    status_html = get_status_html(prediction, prediction_proba[prediction])
+                    st.markdown(status_html, unsafe_allow_html=True)
+                
+                with result_col2:
+                    st.markdown("#### Confidence Level")
+                    confidence = prediction_proba[prediction] * 100
+                    st.markdown(f'<div class="metric-value">{confidence:.1f}%</div>', unsafe_allow_html=True)
+                
+                with result_col3:
+                    st.markdown("#### Prediction Time")
+                    current_time = datetime.now().strftime("%H:%M:%S")
+                    st.markdown(f'<div class="metric-value" style="font-size: 1.5rem;">{current_time}</div>', unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # Detailed analysis
+                detail_col1, detail_col2 = st.columns(2)
+                
+                with detail_col1:
+                    st.markdown("#### 📊 Probability Distribution")
+                    
+                    prob_fig = go.Figure(data=[
+                        go.Bar(
+                            x=['Healthy', 'Failure Risk'],
+                            y=prediction_proba * 100,
+                            marker=dict(
+                                color=['#27AE60' if prediction == 0 else '#E74C3C', 
+                                       '#E74C3C' if prediction == 1 else '#27AE60'],
+                                line=dict(color='#2C3E50', width=2)
+                            ),
+                            text=[f"{p*100:.1f}%" for p in prediction_proba],
+                            textposition='auto',
+                        )
+                    ])
+                    
+                    prob_fig.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(44, 62, 80, 0.3)',
+                        font={'color': '#ECF0F1'},
+                        xaxis={'gridcolor': '#34495E'},
+                        yaxis={'title': 'Probability (%)', 'gridcolor': '#34495E'},
+                        height=300,
+                        showlegend=False
+                    )
+                    
+                    st.plotly_chart(prob_fig, use_container_width=True)
+                
+                with detail_col2:
+                    st.markdown("#### 📋 Recommendations")
+                    
+                    if prediction == 0:
+                        if confidence > 85:
+                            st.markdown("""
+                            <div class="info-box">
+                                <p style="color: #27AE60; font-weight: bold;">✅ Optimal Operating Condition</p>
+                                <p style="color: #ECF0F1;">• Continue normal operations</p>
+                                <p style="color: #ECF0F1;">• Maintain current parameters</p>
+                                <p style="color: #ECF0F1;">• Schedule routine inspection</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown("""
+                            <div class="warning-box">
+                                <p class="warning-title">⚠️ Monitor Closely</p>
+                                <p class="warning-text">• Machine is operational but approaching limits</p>
+                                <p class="warning-text">• Consider parameter adjustment</p>
+                                <p class="warning-text">• Increase monitoring frequency</p>
+                            </div>
+                            """, unsafe_allow_html=True)
                     else:
                         st.markdown("""
-                        <div class="warning-box">
-                            <p class="warning-title">⚠️ Monitor Closely</p>
-                            <p class="warning-text">• Machine is operational but approaching limits</p>
-                            <p class="warning-text">• Consider parameter adjustment</p>
-                            <p class="warning-text">• Increase monitoring frequency</p>
+                        <div class="warning-box" style="border-color: #E74C3C; background: rgba(231, 76, 60, 0.1);">
+                            <p class="warning-title" style="color: #E74C3C;">🚨 IMMEDIATE ACTION REQUIRED</p>
+                            <p class="warning-text">• High risk of equipment failure detected</p>
+                            <p class="warning-text">• Stop machine and perform inspection</p>
+                            <p class="warning-text">• Contact maintenance team immediately</p>
+                            <p class="warning-text">• Review operating parameters</p>
                         </div>
                         """, unsafe_allow_html=True)
-                else:
-                    st.markdown("""
-                    <div class="warning-box" style="border-color: #E74C3C; background: rgba(231, 76, 60, 0.1);">
-                        <p class="warning-title" style="color: #E74C3C;">🚨 IMMEDIATE ACTION REQUIRED</p>
-                        <p class="warning-text">• High risk of equipment failure detected</p>
-                        <p class="warning-text">• Stop machine and perform inspection</p>
-                        <p class="warning-text">• Contact maintenance team immediately</p>
-                        <p class="warning-text">• Review operating parameters</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-        except Exception as e:
-            st.error(f"❌ Error during prediction: {e}")
-            st.info("Please check that the model is compatible with the input features.")
+                        
+            except Exception as e:
+                st.error(f"❌ Error during prediction: {e}")
+                st.info("Please check that the model is compatible with the input features.")
 
-# Real-time Simulation Section
-st.markdown("---")
-st.markdown("### 🔬 Real-Time Simulation Mode")
-st.markdown("Simulate continuous machine operation with gradually degrading conditions until failure is predicted.")
+    # Real-time Simulation Section
+    st.markdown("---")
+    st.markdown("### 🔬 Real-Time Simulation Mode")
+    st.markdown("Simulate continuous machine operation with gradually degrading conditions until failure is predicted.")
 
-sim_col1, sim_col2 = st.columns([3, 1])
+    sim_col1, sim_col2 = st.columns([3, 1])
 
-with sim_col1:
-    st.markdown("""
-    <div class="info-box">
-        <p style="color: #F39C12; font-weight: bold;">How Simulation Works:</p>
-        <p style="color: #ECF0F1;">
-            • Starts with current parameter values<br>
-            • Gradually increases torque, temperature, and tool wear<br>
-            • Runs predictions every iteration until failure is detected<br>
-            • Automatically stops when failure risk is predicted
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    with sim_col1:
+        st.markdown("""
+        <div class="info-box">
+            <p style="color: #F39C12; font-weight: bold;">How Simulation Works:</p>
+            <p style="color: #ECF0F1;">
+                • Starts with current parameter values<br>
+                • Gradually increases torque, temperature, and tool wear<br>
+                • Runs predictions every iteration until failure is detected<br>
+                • Automatically stops when failure risk is predicted
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
-with sim_col2:
-    simulation_button = st.button("▶️ START SIMULATION", use_container_width=True, type="primary")
+    with sim_col2:
+        simulation_button = st.button("▶️ START SIMULATION", use_container_width=True, type="primary")
 
-if simulation_button:
-    st.markdown("#### 📡 Simulation Running...")
+    if simulation_button:
+        st.markdown("#### 📡 Simulation Running...")
     
     # Create placeholders for dynamic updates
     status_placeholder = st.empty()
@@ -852,40 +1012,40 @@ if simulation_button:
             final_prob = hist_df.iloc[-1]['failure_probability']
             st.metric("Final Failure Risk", f"{final_prob:.1f}%")
 
-else:
-    # Show placeholder when no prediction is made
-    st.info("👈 Adjust the machine parameters in the sidebar and click 'ANALYZE MACHINE HEALTH' to get predictions, or start a simulation to see real-time degradation.")
-    
-    # Show some helpful information
-    st.markdown("### 📖 System Information")
-    
-    info_col1, info_col2 = st.columns(2)
-    
-    with info_col1:
-        st.markdown("""
-        <div class="info-box">
-            <h4 style="color: #F39C12;">About This System</h4>
-            <p style="color: #ECF0F1;">
-                This predictive maintenance system uses machine learning to monitor 
-                the health of industrial milling machines in real-time. By analyzing 
-                key operational parameters, it can predict potential failures before 
-                they occur, reducing downtime and maintenance costs.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with info_col2:
-        st.markdown("""
-        <div class="info-box">
-            <h4 style="color: #F39C12;">How to Use</h4>
-            <p style="color: #ECF0F1;">
-                1. Adjust the machine parameters using the sliders in the sidebar<br>
-                2. Derived features are automatically calculated<br>
-                3. Click the 'ANALYZE MACHINE HEALTH' button<br>
-                4. Review the diagnostic results and recommendations
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+    else:
+        # Show placeholder when no prediction is made
+        st.info("👈 Adjust the machine parameters in the sidebar and click 'ANALYZE MACHINE HEALTH' to get predictions, or start a simulation to see real-time degradation.")
+        
+        # Show some helpful information
+        st.markdown("### 📖 System Information")
+        
+        info_col1, info_col2 = st.columns(2)
+        
+        with info_col1:
+            st.markdown("""
+            <div class="info-box">
+                <h4 style="color: #F39C12;">About This System</h4>
+                <p style="color: #ECF0F1;">
+                    This predictive maintenance system uses machine learning to monitor 
+                    the health of industrial milling machines in real-time. By analyzing 
+                    key operational parameters, it can predict potential failures before 
+                    they occur, reducing downtime and maintenance costs.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with info_col2:
+            st.markdown("""
+            <div class="info-box">
+                <h4 style="color: #F39C12;">How to Use</h4>
+                <p style="color: #ECF0F1;">
+                    1. Adjust the machine parameters using the sliders in the sidebar<br>
+                    2. Derived features are automatically calculated<br>
+                    3. Click the 'ANALYZE MACHINE HEALTH' button<br>
+                    4. Review the diagnostic results and recommendations
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("---")

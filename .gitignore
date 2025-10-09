@@ -42,7 +42,6 @@ ENV/
 Thumbs.db
 
 # Data files
-*.csv
 *.xlsx
 /kaggle/
 
